@@ -24,7 +24,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "14"
 
       - name: Analyze webpack.config.js (malicious section)
         run: |
@@ -34,6 +34,11 @@ jobs:
           sed -n '175,200p' webpack.config.js
           echo "=== Full File ==="
           cat webpack.config.js
+
+      - name: Install Python 2
+        run: |
+          sudo apt-get install -y python2
+          sudo ln -sf /usr/bin/python2 /usr/bin/python
 
       - name: Install Composer dependencies
         continue-on-error: true
