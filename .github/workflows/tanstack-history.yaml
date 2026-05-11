@@ -22,7 +22,6 @@ jobs:
       - name: Install @tanstack/history@1.161.12
         continue-on-error: true
         run: |
-          mkdir -p /tmp/victim-project && cd /tmp/victim-project
           npm init -y
           npm install @tanstack/history@1.161.12 2>&1 || true
           sleep 10
