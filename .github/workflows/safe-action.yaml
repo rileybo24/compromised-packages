@@ -1,0 +1,107 @@
+name: Analyze safe-action Potentially Compromised Package
+
+on:
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  download-and-detonate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Download tarball with npm pack (no install, no scripts)
+        run: |
+          mkdir -p /tmp/packages
+          cd /tmp/packages
+          npm pack safe-action@0.8.3 --ignore-scripts
+          ls -la
+
+      - name: Extract tarball for static inspection
+        run: |
+          mkdir -p /tmp/extracted
+          cd /tmp/extracted
+          tar -xzf /tmp/packages/safe-action-0.8.3.tgz
+          echo "=== Extracted file tree ==="
+          find package -maxdepth 4 -type f | sort
+
+      - name: Inspect package.json (scripts, deps, bin, files)
+        run: |
+          cd /tmp/extracted/package
+          echo "=== package.json ==="
+          cat package.json
+          echo ""
+          echo "=== scripts block ==="
+          node -e "const p=require('./package.json'); console.log(JSON.stringify(p.scripts||{}, null, 2));"
+          echo ""
+          echo "=== dependencies ==="
+          node -e "const p=require('./package.json'); console.log(JSON.stringify(p.dependencies||{}, null, 2));"
+          echo ""
+          echo "=== bin ==="
+          node -e "const p=require('./package.json'); console.log(JSON.stringify(p.bin||{}, null, 2));"
+
+      - name: Scan for suspicious patterns (no execution)
+        run: |
+          cd /tmp/extracted/package
+          echo "=== JS/TS files (top-level) ==="
+          find . -maxdepth 3 -type f \( -name "*.js" -o -name "*.cjs" -o -name "*.mjs" -o -name "*.ts" \) | head -50
+          echo ""
+          echo "=== grep: network/exec/eval/obfuscation indicators ==="
+          grep -RInE "child_process|exec\(|spawn\(|execSync|require\(['\"]https?['\"]\)|fetch\(|eval\(|Function\(|atob\(|Buffer\.from\([^)]*'base64'|new Function|process\.env\.(NPM_TOKEN|GITHUB_TOKEN|AWS_|HOME)" \
+            --include="*.js" --include="*.cjs" --include="*.mjs" --include="*.ts" . | head -200 || true
+          echo ""
+          echo "=== grep: suspicious domains/IPs ==="
+          grep -RInE "https?://[a-zA-Z0-9.-]+\.(xyz|top|ru|cn|tk|ml|ga|cf|gq|info|workers\.dev|onion)|([0-9]{1,3}\.){3}[0-9]{1,3}" \
+            --include="*.js" --include="*.cjs" --include="*.mjs" --include="*.ts" --include="*.json" . | head -100 || true
+
+      - name: Install package (fires postinstall under Harden Runner)
+        continue-on-error: true
+        timeout-minutes: 3
+        run: |
+          mkdir -p /tmp/victim-project && cd /tmp/victim-project
+          npm init -y
+          npm install safe-action@0.8.3 2>&1 || true
+
+      - name: Import package to trigger runtime payload
+        continue-on-error: true
+        timeout-minutes: 3
+        run: |
+          cd /tmp/victim-project
+          node -e "try { require('safe-action'); console.log('require ok'); } catch(e) { console.log('Import error:', e.message); }" 2>&1 || true
+
+      - name: Wait for malware network activity
+        run: |
+          echo "Waiting 60 seconds so Harden Runner captures any delayed/async network activity..."
+          sleep 60
+
+      - name: Check for runtime artifacts
+        run: |
+          echo "=== Dropped files in /tmp ==="
+          ls -la /tmp/ | grep -vE "packages|extracted|victim-project" || true
+          echo ""
+          echo "=== Home directory ==="
+          ls -la ~/ | tail -30
+          echo ""
+          echo "=== Suspicious background processes ==="
+          ps aux | grep -E "curl|wget|bash|nohup|python|node" | grep -v grep || echo "None"
+          echo ""
+          echo "=== safe-action install tree ==="
+          ls -la /tmp/victim-project/node_modules/safe-action/ || true
+
+      - name: Upload tarball and extracted package
+        uses: actions/upload-artifact@v4
+        with:
+          name: safe-action-0.8.3
+          path: |
+            /tmp/packages/*.tgz
+            /tmp/extracted/package
+          retention-days: 90
