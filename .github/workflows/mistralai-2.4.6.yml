@@ -1,0 +1,45 @@
+name: mistralai-2.4.6 dropper demo
+
+on:
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  demo:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+          
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Download mistralai 2.4.6 tgz from PyPI
+        run: |
+          curl -L -o mistralai-2.4.6.tar.gz \
+            https://files.pythonhosted.org/packages/4a/2d/9d7df51d9331d566dd42f7bfd0b500d30a31d388e09a8d6edcbbba694a72/mistralai-2.4.6.tar.gz
+          ls -lh mistralai-2.4.6.tar.gz
+
+      - name: Install from tgz
+        run: pip install mistralai-2.4.6.tar.gz
+
+      - name: Import mistralai (triggers dropper)
+        run: python -c "import mistralai"
+
+      - name: Check dropped payload
+        run: |
+          echo "=== /tmp contents ==="
+          ls -la /tmp/
+          echo "=== transformers.pyz present? ==="
+          test -f /tmp/transformers.pyz && echo "FOUND: payload was dropped" || echo "NOT FOUND"
+
+      - name: Check for outbound connection (network)
+        run: |
+          echo "=== active connections at time of check ==="
+          ss -tnp || true
+          sleep 120
