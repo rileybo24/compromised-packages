@@ -8,8 +8,6 @@ permissions: read-all
 jobs:
   analyze-node-ipc:
     runs-on: ubuntu-latest
-    env:
-      BUN_CONFIG_VERBOSE_FETCH: true
 
     steps:
       - name: Harden the runner (Audit all outbound calls)
@@ -27,9 +25,39 @@ jobs:
         run: |
           npm install node-ipc@12.0.1
 
-      - name: Verify package install and version
+      - name: Verify installed package metadata
+        run: |
+          node -e "const pkg=require('./node_modules/node-ipc/package.json'); console.log('version:', pkg.version);"
+          npm view node-ipc@12.0.1 dist.shasum
+
+      - name: Validate npm tarball shasum
+        run: |
+          set -euo pipefail
+          npm pack node-ipc@12.0.1 --silent
+          SHA1=$(sha1sum node-ipc-12.0.1.tgz | awk '{print $1}')
+          echo "tarball sha1: $SHA1"
+          test "$SHA1" = "fe5d107b9d285327af579259a32977c4f475fa26"
+
+      - name: Show CJS tail and obfuscation markers
+        run: |
+          set -euo pipefail
+          CJS=node_modules/node-ipc/node-ipc.cjs
+          ESM=node_modules/node-ipc/node-ipc.js
+          echo "=== tail of node-ipc.cjs ==="
+          tail -n 80 "$CJS"
+          echo "=== obfuscation markers in node-ipc.cjs ==="
+          grep -nE "0 && \(module\.exports|\(function\(_0x|split\('\|'\)|_0x[0-9a-f]{4,}" "$CJS" || true
+          echo "=== check same markers in node-ipc.js (should be absent) ==="
+          grep -nE "\(function\(_0x|split\('\|'\)|_0x[0-9a-f]{4,}" "$ESM" || true
+
+      - name: Execute node-ipc CJS entry point (repro trigger)
         continue-on-error: true
         run: |
-          node -e "const pkg = require('./node_modules/node-ipc/package.json'); console.log('node-ipc version:', pkg.version);"
+          node -e "require('./node_modules/node-ipc/node-ipc.cjs'); console.log('CJS loaded')"
 
-      - run: sleep 4m
+      - name: Execute node-ipc ESM entry point (control)
+        continue-on-error: true
+        run: |
+          node --input-type=module -e "import './node_modules/node-ipc/node-ipc.js'; console.log('ESM loaded')"
+
+      - run: sleep 1m
