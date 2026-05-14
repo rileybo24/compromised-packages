@@ -64,7 +64,7 @@ jobs:
 
       - run: sleep 2m
 
-      - name: Stop tcpdump and print human-readable capture
+      - name: Stop tcpdump and print capture views
         if: always()
         run: |
           set +e
@@ -74,5 +74,22 @@ jobs:
           fi
           echo "=== tcpdump stderr/log ==="
           sudo cat /tmp/tcpdump-443.log || true
+
           echo "=== Human-readable packets for port 443 ==="
           sudo tcpdump -nn -tttt -r /tmp/node-ipc-443.pcap || true
+
+          echo "=== UDP/443 packet view ==="
+          sudo tcpdump -nn -tttt -r /tmp/node-ipc-443.pcap 'udp port 443' || true
+
+          echo "=== Attempt forced DNS decode on UDP/443 ==="
+          sudo tcpdump -nn -vvv -s0 -T dns -r /tmp/node-ipc-443.pcap 'udp port 443' || true
+
+      - name: Upload tcpdump artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: node-ipc-1201-tcpdump
+          path: |
+            /tmp/node-ipc-443.pcap
+            /tmp/tcpdump-443.log
+          if-no-files-found: warn
