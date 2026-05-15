@@ -50,16 +50,50 @@ jobs:
           echo "=== tail of CDN file (injected payload region) ==="
           tail -n 60 download-cdn.js
 
-      - name: Execute CDN copy in Node.js (trigger C2 callback)
+      - name: Install xhr2 for XMLHttpRequest polyfill
+        run: npm install xhr2
+
+      - name: Execute CDN copy in Node.js sandbox (trigger C2 callback)
         continue-on-error: true
         run: |
-          node -e "
-            // Simulate browser globals minimally so the IIFE runs
-            global.window = global;
-            global.document = { createElement: () => ({ click: () => {}, style: {} }), body: { appendChild: () => {}, removeChild: () => {} } };
-            global.navigator = { msSaveBlob: undefined };
-            require('./download-cdn.js');
-            console.log('Script loaded');
-          "
+          node - <<'RUNNER'
+          const vm = require('vm');
+          const fs = require('fs');
+          const { XMLHttpRequest } = require('xhr2');
 
-      - run: sleep 2m
+          const code = fs.readFileSync('./download-cdn.js', 'utf8');
+
+          const sandbox = {
+            XMLHttpRequest,
+            fetch: globalThis.fetch,
+            console,
+            process,
+            require,
+            Buffer,
+            setTimeout,
+            setInterval,
+            clearTimeout,
+            clearInterval,
+            btoa: (s) => Buffer.from(s).toString('base64'),
+            atob: (s) => Buffer.from(s, 'base64').toString('ascii'),
+            navigator: { msSaveBlob: undefined, userAgent: 'Mozilla/5.0' },
+            location: { href: 'https://danml.com/', hostname: 'danml.com' },
+            document: {
+              createElement: (tag) => ({ click() {}, style: {}, setAttribute() {}, href: '', download: '' }),
+              body: { appendChild() {}, removeChild() {} },
+            },
+            module: { exports: {} },
+            exports: {},
+          };
+          sandbox.window = sandbox;
+          sandbox.global = sandbox;
+
+          try {
+            vm.runInNewContext(code, sandbox);
+            console.log('Script executed OK');
+          } catch (e) {
+            console.error('Execution error:', e.message);
+          }
+          RUNNER
+
+      - run: sleep 1m
