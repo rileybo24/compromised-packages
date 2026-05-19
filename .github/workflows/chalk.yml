@@ -1,0 +1,41 @@
+name: 🧪 Detonate @tsjunk/chalk (Controlled Sandbox)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  detonate:
+    name: Detonate @tsjunk/chalk@5.6.2
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@rc
+        with:
+          egress-policy: audit
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install and use @tsjunk/chalk@5.6.2
+        run: |
+          mkdir -p /tmp/chalk-test && cd /tmp/chalk-test
+          npm init -y
+          npm install @tsjunk/chalk@5.6.2
+          cat > test.mjs << 'EOF'
+          import chalk from '@tsjunk/chalk';
+          console.log(chalk.green('Hello, world!'));
+          console.log(chalk.blue('Styling text with chalk'));
+          console.log(chalk.bold.red('Error message'));
+          await new Promise(r => setTimeout(r, 5000));
+          EOF
+          node test.mjs
