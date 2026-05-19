@@ -1,0 +1,30 @@
+name: Install durabletask With Latest HR
+
+on:
+  workflow_dispatch:
+
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install durabletask
+        continue-on-error: true
+        run: pip install durabletask
+
+      - name: Import durabletask to trigger runtime payload
+        continue-on-error: true
+        run: |
+          python3 -c "import durabletask; print('durabletask imported')"
+      - name: Let the payload execute
+        run: |
+          sleep 30
