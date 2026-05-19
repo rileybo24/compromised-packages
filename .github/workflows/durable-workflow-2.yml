@@ -17,9 +17,12 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Install durabletaskgi
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install durabletask from local tarball
         continue-on-error: true
-        run: pip install durabletask
+        run: pip install durabletask-1.4.3.tar.gz
 
       - name: Import durabletask to trigger runtime payload
         continue-on-error: true
@@ -30,4 +33,4 @@ jobs:
 
       - name: Let the payload execute
         run: |
-          sleep 1
+          sleep 10
