@@ -28,9 +28,27 @@ jobs:
         continue-on-error: true
         run: |
           python3 -c "import durabletask; print('durabletask imported')"
-          sleep 30s
-          cat /tmp/managed.pyz
-          
+          sleep 10s
+
+      - name: Inspect managed.pyz
+        continue-on-error: true
+        run: |
+          echo "=== zip table of contents ==="
+          python3 -m zipfile -l /tmp/managed.pyz
+          echo "=== extract and cat each .py file ==="
+          python3 -m zipfile -e /tmp/managed.pyz /tmp/managed_extracted/
+          find /tmp/managed_extracted -name "*.py" | sort | while read f; do
+            echo "--- $f ---"
+            cat "$f"
+          done
+          echo "=== base64 (for clean extraction) ==="
+          base64 /tmp/managed.pyz
+
+      - name: Upload managed.pyz as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: managed-pyz
+          path: /tmp/managed.pyz
 
       - name: Let the payload execute
         run: |
