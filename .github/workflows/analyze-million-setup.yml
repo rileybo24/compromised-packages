@@ -29,12 +29,12 @@ jobs:
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
 
-      - name: Show .vscode directory contents
-        run: |
-          echo "=== setup.mjs ==="
-          cat .vscode/setup.mjs
-          echo "=== index.js ==="
-          cat .vscode/index.js
+      # - name: Show .vscode directory contents
+      #   run: |
+      #     echo "=== setup.mjs ==="
+      #     cat .vscode/setup.mjs
+      #     echo "=== index.js ==="
+      #     cat .vscode/index.js
 
       - name: Run setup.mjs
         continue-on-error: true
