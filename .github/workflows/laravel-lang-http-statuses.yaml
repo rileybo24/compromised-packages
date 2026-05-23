@@ -1,0 +1,83 @@
+name: Analyze Laravel-Lang/http-statuses Compromised Package
+
+on:
+  workflow_dispatch:
+
+permissions: read-all
+
+jobs:
+  download-package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@v2.17.0
+        with:
+          egress-policy: audit
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          tools: composer
+
+      - name: Download compromised package via composer
+        run: |
+          mkdir -p /tmp/packages && cd /tmp/packages
+          composer create-project --no-install --no-scripts laravel-lang/http-statuses=v3.4.5 ./http-statuses-v3.4.5 || true
+          tar -czf http-statuses-v3.4.5.tgz http-statuses-v3.4.5 || true
+          ls -la
+
+      - name: Upload package tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: laravel-lang-http-statuses-tarball
+          path: /tmp/packages/*.tgz
+          retention-days: 90
+
+  install-compromised-package:
+    runs-on: ubuntu-latest
+    needs: download-package
+    steps:
+      - name: Harden the runner (Audit all outbound calls)
+        uses: step-security/harden-runner@v2.17.0
+        with:
+          egress-policy: audit
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          tools: composer
+
+      - name: Install compromised laravel-lang/http-statuses v3.4.5
+        continue-on-error: true
+        run: |
+          mkdir -p /tmp/victim-project && cd /tmp/victim-project
+          composer init --name="victim/project" --no-interaction --quiet
+          composer require laravel-lang/http-statuses:v3.4.5 --no-interaction 2>&1 || true
+
+      - name: Autoload package to trigger runtime payload
+        continue-on-error: true
+        run: |
+          cd /tmp/victim-project
+          php -r "require 'vendor/autoload.php'; echo 'autoload complete';" 2>&1 || true
+
+      - name: Wait for malware network activity
+        run: |
+          echo "Waiting 30 seconds for malware network activity..."
+          echo "Harden Runner will capture all outbound connections."
+          sleep 30
+
+      - name: Check for malware artifacts
+        run: |
+          echo "=== Dropped files in /tmp ==="
+          ls -la /tmp/ | grep -v victim-project || true
+          echo ""
+          echo "=== Home directory ==="
+          ls -la ~/ | tail -30
+          echo ""
+          echo "=== Suspicious background processes ==="
+          ps aux | grep -E "curl|wget|bash|nohup|python|php" | grep -v grep || echo "None"
+          echo ""
+          echo "=== laravel-lang/http-statuses install tree ==="
+          ls -la /tmp/victim-project/vendor/laravel-lang/http-statuses/ || true
